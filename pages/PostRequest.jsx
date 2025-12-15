@@ -332,7 +332,7 @@ export default function PostRequest() {
     return <SubscriptionGate user={user} feature="job posting" />;
   }
 
-  if (profile.approval_status !== 'approved') {
+  if (!isPrivileged && profile?.approval_status !== 'approved') {
     return <ErrorBox title="Profile under review" error="Pending approval" onBack={() => navigate(-1)} />;
   }
 
