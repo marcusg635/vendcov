@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -42,6 +42,16 @@ export default function AdminChat() {
     enabled: !!user,
     refetchInterval: 3000
   });
+
+  const dedupedMessages = useMemo(() => {
+    const seen = new Set();
+    return (messages || []).filter((m) => {
+      const key = `${m.sender_id}-${m.content}-${m.created_date}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [messages]);
 
   // Mark messages as read
   useEffect(() => {
@@ -93,9 +103,8 @@ export default function AdminChat() {
 
   const handleSend = (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
-    sendMutation.mutate(newMessage);
-    setNewMessage('');
+    if (!newMessage.trim() || !user?.email) return;
+    sendMutation.mutate(newMessage.trim());
   };
 
   if (user?.role !== 'admin') {
@@ -121,13 +130,13 @@ export default function AdminChat() {
       <Card className="flex-1 flex flex-col">
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4">
-            {messages.length === 0 ? (
+            {dedupedMessages.length === 0 ? (
               <div className="text-center py-12 text-stone-500">
                 <Shield className="w-12 h-12 mx-auto mb-3 text-stone-300" />
                 <p>No messages yet. Start the conversation!</p>
               </div>
             ) : (
-              messages.map((message) => {
+              dedupedMessages.map((message) => {
                 const isMe = message.sender_id === user?.email;
                 return (
                   <div

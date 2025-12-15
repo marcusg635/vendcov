@@ -99,7 +99,6 @@ export default function Profile() {
     business_name: '',
     bio: '',
     selfie_url: '',
-    business_logo_url: '',
     service_types: [],
     experience_years: '',
     street_address: '',
@@ -139,7 +138,6 @@ export default function Profile() {
         business_name: profile.business_name || '',
         bio: profile.bio || '',
         selfie_url: profile.selfie_url || '',
-        business_logo_url: profile.business_logo_url || '',
         service_types: profile.service_types || [],
         experience_years: profile.experience_years || '',
         street_address: profile.street_address || '',
@@ -595,21 +593,14 @@ export default function Profile() {
                       Add Link
                     </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Selfie *</Label>
-                    {formData.selfie_url && (
-                      <img src={formData.selfie_url} alt="Selfie" className="w-20 h-20 rounded-full object-cover mb-2" />
-                    )}
-                    <Input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'selfie_url')} disabled={isUploading} />
-                    <p className="text-xs text-stone-500">📋 This photo will be visible to other users on your profile</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Business Logo (Optional)</Label>
-                    {formData.business_logo_url && (
-                      <img src={formData.business_logo_url} alt="Logo" className="w-20 h-20 rounded-lg object-cover mb-2" />
-                    )}
-                    <Input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'business_logo_url')} disabled={isUploading} />
-                  </div>
+      <div className="space-y-2">
+        <Label>Selfie *</Label>
+        {formData.selfie_url && (
+          <img src={formData.selfie_url} alt="Selfie" className="w-20 h-20 rounded-full object-cover mb-2" />
+        )}
+        <Input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'selfie_url')} disabled={isUploading} />
+        <p className="text-xs text-stone-500">📋 This photo will be visible to other users on your profile</p>
+      </div>
                   <div className="space-y-2">
                     <Label>Insurance Certificate (Optional)</Label>
                     <Input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => handleFileUpload(e, 'insurance_url')} disabled={isUploading} />
@@ -706,20 +697,14 @@ export default function Profile() {
                       <p className="text-stone-900 dark:text-stone-100 text-sm">{formData.bio}</p>
                     </div>
                   )}
-                  <div className="col-span-2 flex gap-4">
-                    {formData.selfie_url && (
-                      <div>
-                        <p className="font-medium text-stone-500 mb-2">Your Photo</p>
-                        <img src={formData.selfie_url} alt="Selfie" className="w-20 h-20 rounded-full object-cover" />
-                      </div>
-                    )}
-                    {formData.business_logo_url && (
-                      <div>
-                        <p className="font-medium text-stone-500 mb-2">Logo</p>
-                        <img src={formData.business_logo_url} alt="Logo" className="w-20 h-20 rounded-lg object-cover" />
-                      </div>
-                    )}
-                  </div>
+                <div className="col-span-2 flex gap-4">
+                  {formData.selfie_url && (
+                    <div>
+                      <p className="font-medium text-stone-500 mb-2">Your Photo</p>
+                      <img src={formData.selfie_url} alt="Selfie" className="w-20 h-20 rounded-full object-cover" />
+                    </div>
+                  )}
+                </div>
                 </div>
                 <Button variant="outline" size="sm" onClick={() => setEditMode(true)} className="w-full mt-4">
                   <Edit className="w-4 h-4 mr-2" />

@@ -20,7 +20,8 @@ const US_STATES = [
 
 export default function Analytics() {
   const [selectedState, setSelectedState] = useState('all');
-  const [viewMode, setViewMode] = useState(null); // 'earnings', 'vendors', 'jobs', 'open_jobs', 'completed_jobs'
+  const [viewMode, setViewMode] = useState(null); // 'earnings', 'vendors', 'jobs', 'open_jobs'
+  const [selectedStatus, setSelectedStatus] = useState(null); // 'completed', 'filled', 'open', 'cancelled'
 
   const { data: allProfiles = [], isLoading: profilesLoading } = useQuery({
     queryKey: ['allVendorProfiles'],
@@ -76,6 +77,56 @@ export default function Analytics() {
   const displayData = selectedState === 'all' 
     ? stateData 
     : stateData.filter(d => d.state === selectedState);
+
+  const statusLabel = {
+    completed: 'Completed Jobs',
+    filled: 'Filled Jobs',
+    open: 'Open Jobs',
+    cancelled: 'Cancelled Jobs'
+  };
+
+  const statusCards = [
+    {
+      key: 'completed',
+      count: completedJobs,
+      icon: CheckCircle,
+      container: 'bg-emerald-50 border-emerald-200',
+      iconColor: 'text-emerald-600',
+      value: 'text-emerald-900',
+      label: 'text-emerald-700'
+    },
+    {
+      key: 'filled',
+      count: filledJobs,
+      icon: Briefcase,
+      container: 'bg-blue-50 border-blue-200',
+      iconColor: 'text-blue-600',
+      value: 'text-blue-900',
+      label: 'text-blue-700'
+    },
+    {
+      key: 'open',
+      count: openJobs,
+      icon: Clock,
+      container: 'bg-amber-50 border-amber-200',
+      iconColor: 'text-amber-600',
+      value: 'text-amber-900',
+      label: 'text-amber-700'
+    },
+    {
+      key: 'cancelled',
+      count: allJobs.filter(j => j.status === 'cancelled').length,
+      icon: XCircle,
+      container: 'bg-stone-50 border-stone-200',
+      iconColor: 'text-stone-600',
+      value: 'text-stone-900',
+      label: 'text-stone-700'
+    }
+  ];
+
+  const statusFilteredJobs = selectedStatus
+    ? allJobs.filter(job => job.status === selectedStatus)
+    : [];
 
   if (isLoading) {
     return (
@@ -292,85 +343,66 @@ export default function Analytics() {
 
           {/* Job Status Breakdown */}
           {!viewMode && (
-          <Card className="border-stone-200">
-            <CardHeader>
-              <CardTitle>Job Status Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div 
-                  className="p-4 bg-emerald-50 rounded-lg border border-emerald-200 cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => setViewMode('completed_jobs')}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <CheckCircle className="w-5 h-5 text-emerald-600" />
-                    <span className="text-2xl font-bold text-emerald-900">{completedJobs}</span>
-                  </div>
-                  <p className="text-sm font-medium text-emerald-700">Completed</p>
-                </div>
-
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <Briefcase className="w-5 h-5 text-blue-600" />
-                    <span className="text-2xl font-bold text-blue-900">{filledJobs}</span>
-                  </div>
-                  <p className="text-sm font-medium text-blue-700">Filled</p>
-                </div>
-
-                <div className="p-4 bg-amber-50 rounded-lg border border-amber-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <Clock className="w-5 h-5 text-amber-600" />
-                    <span className="text-2xl font-bold text-amber-900">{openJobs}</span>
-                  </div>
-                  <p className="text-sm font-medium text-amber-700">Open</p>
-                </div>
-
-                <div className="p-4 bg-stone-50 rounded-lg border border-stone-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <XCircle className="w-5 h-5 text-stone-600" />
-                    <span className="text-2xl font-bold text-stone-900">
-                      {allJobs.filter(j => j.status === 'cancelled').length}
-                    </span>
-                  </div>
-                  <p className="text-sm font-medium text-stone-700">Cancelled</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          )}
-
-          {viewMode === 'completed_jobs' && (
             <Card className="border-stone-200">
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>All Completed Jobs</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => setViewMode(null)}>
-                    <X className="w-4 h-4 mr-2" />
-                    Close
-                  </Button>
-                </div>
+                <CardTitle>Job Status Breakdown</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {allJobs.filter(j => j.status === 'completed').map(job => (
-                    <div key={job.id} className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                      <div className="flex-1">
-                        <p className="font-medium text-emerald-900">{job.title}</p>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-emerald-700">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {format(new Date(job.event_date), 'MMM d, yyyy')}
-                          </span>
-                          <span>{job.city}, {job.state}</span>
-                        </div>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {statusCards.map(({ key, count, icon: Icon, container, value, label, iconColor }) => (
+                    <div
+                      key={key}
+                      className={`p-4 rounded-lg border cursor-pointer hover:shadow-md transition-shadow ${container} ${selectedStatus === key ? 'ring-2 ring-offset-2 ring-blue-300' : ''}`}
+                      onClick={() => setSelectedStatus(selectedStatus === key ? null : key)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <Icon className={`w-5 h-5 ${iconColor}`} />
+                        <span className={`text-2xl font-bold ${value}`}>{count}</span>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-emerald-600">${(job.calculated_pay || job.pay_amount || 0).toLocaleString()}</p>
-                        <ServiceBadge type={job.service_type} size="sm" />
-                      </div>
+                      <p className={`text-sm font-medium capitalize ${label}`}>{key}</p>
                     </div>
                   ))}
                 </div>
+
+                {selectedStatus && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-stone-900">{statusLabel[selectedStatus]}</h3>
+                      <Button variant="ghost" size="sm" onClick={() => setSelectedStatus(null)}>
+                        <X className="w-4 h-4 mr-2" />
+                        Close
+                      </Button>
+                    </div>
+
+                    {statusFilteredJobs.length > 0 ? (
+                      statusFilteredJobs.map(job => (
+                        <div
+                          key={job.id}
+                          className="flex items-center justify-between p-4 rounded-lg border border-stone-200 bg-white"
+                        >
+                          <div className="flex-1">
+                            <p className="font-medium text-stone-900">{job.title}</p>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-stone-600">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="w-3 h-3" />
+                                {format(new Date(job.event_date), 'MMM d, yyyy')}
+                              </span>
+                              <span>{job.city}, {job.state}</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-stone-900">${(job.calculated_pay || job.pay_amount || 0).toLocaleString()}</p>
+                            <ServiceBadge type={job.service_type} size="sm" />
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-6 text-center text-stone-500 bg-stone-50 rounded-lg border border-stone-200">
+                        No jobs found for this status.
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}

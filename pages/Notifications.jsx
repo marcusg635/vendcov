@@ -79,9 +79,16 @@ export default function Notifications() {
   });
 
   const getNotificationLink = (notification) => {
+    if (!notification.reference_id) return null;
+
     if (notification.type === 'new_message') {
       return createPageUrl(`Chat?jobId=${notification.reference_id}`);
     }
+
+    if (notification.type?.includes('support')) {
+      return createPageUrl(`SupportTickets?id=${notification.reference_id}`);
+    }
+
     return createPageUrl(`JobDetails?id=${notification.reference_id}`);
   };
 

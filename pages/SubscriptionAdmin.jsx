@@ -60,6 +60,7 @@ export default function SubscriptionAdmin() {
       await base44.asServiceRole.entities.User.update(userId, {
         subscription_status: 'active',
         subscription_end_date: endDate.toISOString(),
+        subscription_start_date: new Date().toISOString(),
 
         subscription_granted_by_admin: true,
         subscription_source: 'admin',
