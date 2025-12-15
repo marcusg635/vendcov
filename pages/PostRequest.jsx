@@ -181,88 +181,20 @@ export default function PostRequest() {
 
   const hasChosenTypes = !!jobData.service_type && !!jobData.event_type;
 
-  const assistantQuestions = useMemo(
-    () => buildAiQuestions(jobData),
-    [jobData.service_type, jobData.event_type]
-  );
-
-  useEffect(() => {
-    setAssistantStep(0);
-    setAiAnswers({});
-  }, [jobData.service_type, jobData.event_type]);
-
   const goNext = () => {
-    setStep((s) => {
-      if (s === 'type') return 'assistant';
-      if (s === 'assistant') return 'form';
-      if (s === 'form') return 'preview';
-      return 'preview';
-    });
+    setStep((s) => (s === 'type' ? 'form' : s === 'form' ? 'preview' : 'preview'));
   };
 
   const goBack = () => {
-    setStep((s) => {
-      if (s === 'preview') return 'form';
-      if (s === 'form') return 'assistant';
-      if (s === 'assistant') return 'type';
-      return 'type';
-    });
+    setStep((s) => (s === 'preview' ? 'form' : s === 'form' ? 'type' : 'type'));
   };
 
   const isPrivileged = user?.role === 'admin' || user?.role === 'owner';
 
-  const currentQuestion = assistantQuestions[assistantStep];
-
-  const finalizeAiPlan = useCallback(() => {
-    const { start, end } = formatFromTimes(aiAnswers.times || '');
-    const inferredPay = aiAnswers.pay || jobData.pay_amount;
-
-    const summaryLines = [
-      aiAnswers.deliverables && `• What you need: ${aiAnswers.deliverables}`,
-      aiAnswers.requirements && `• Requirements: ${aiAnswers.requirements}`,
-      aiAnswers.extras && `• Notes: ${aiAnswers.extras}`
-    ].filter(Boolean);
-
-    updateJobData({
-      title: aiAnswers.title || jobData.title || `${jobData.event_type} ${jobData.service_type}`.trim(),
-      description: summaryLines.join('\n'),
-      event_date: aiAnswers.date || jobData.event_date,
-      event_start_time: start || jobData.event_start_time,
-      event_end_time: end || jobData.event_end_time,
-      venue_name: aiAnswers.location || jobData.venue_name,
-      city: jobData.city || '',
-      state: jobData.state || '',
-      pay_amount: inferredPay,
-      payment_method: aiAnswers.pay?.toLowerCase().includes('cash') ? 'cash' : jobData.payment_method,
-      requirements: aiAnswers.requirements || jobData.requirements,
-      parking_info: aiAnswers.parking || jobData.parking_info,
-      additional_notes: aiAnswers.extras || jobData.additional_notes,
-      ai_generated_questions: assistantQuestions.map((q) => q.prompt)
-    });
-
-    setStep('preview');
-  }, [aiAnswers, assistantQuestions, jobData, updateJobData]);
-
-  const handleAiNext = () => {
-    if (assistantStep < assistantQuestions.length - 1) {
-      setAssistantStep((s) => s + 1);
-    } else {
-      finalizeAiPlan();
-    }
-  };
-
-  const handleAiBack = () => {
-    if (assistantStep === 0) {
-      goBack();
-    } else {
-      setAssistantStep((s) => Math.max(0, s - 1));
-    }
-  };
-
   /* ---------- submit ---------- */
 
   const handlePost = useCallback(async () => {
-    if (!user?.email || isPosting) return;
+    if (!user?.email || !profile || isPosting) return;
 
     setIsPosting(true);
 
@@ -273,7 +205,7 @@ export default function PostRequest() {
         pay_amount: toNumberOrUndefined(jobData.pay_amount),
         requester_id: user.email,
         requester_name: profile?.full_name || user.full_name || user.email,
-        requester_business: profile?.business_name || user?.business_name || '',
+        requester_business: profile?.business_name || '',
         status: 'open'
       });
 
@@ -325,14 +257,13 @@ export default function PostRequest() {
     isPrivileged ||
     user?.subscription_status === 'active' ||
     user?.subscription_status === 'trialing' ||
-    user?.subscription_granted_by_admin ||
     !!user?.stripe_subscription_id;
 
   if (!hasActiveSubscription) {
     return <SubscriptionGate user={user} feature="job posting" />;
   }
 
-  if (!isPrivileged && profile?.approval_status !== 'approved') {
+  if (profile.approval_status !== 'approved') {
     return <ErrorBox title="Profile under review" error="Pending approval" onBack={() => navigate(-1)} />;
   }
 

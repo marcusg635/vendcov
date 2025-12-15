@@ -17,6 +17,16 @@ export default function AdminChat() {
   const [newMessage, setNewMessage] = useState('');
   const messagesEndRef = useRef(null);
 
+  const dedupedMessages = useMemo(() => {
+    const seen = new Set();
+    return messages.filter((m) => {
+      const key = `${m.sender_id}-${m.content}-${m.created_date}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [messages]);
+
   useEffect(() => {
     const loadUser = async () => {
       const u = await base44.auth.me();

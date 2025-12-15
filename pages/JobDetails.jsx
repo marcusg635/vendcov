@@ -6,11 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Clock, DollarSign, MapPin, User, CheckCircle2, Flag, Undo2, Wallet } from 'lucide-react';
+import { ArrowLeft, Clock, DollarSign, MapPin } from 'lucide-react';
 import { format } from 'date-fns';
 import JobStatusIndicator from '@/components/jobs/JobStatusIndicator';
-import TimeClockCard from '@/components/job/TimeClockCard';
-import { toast } from 'sonner';
 
 function LoadingScreen() {
   return (
@@ -58,8 +56,6 @@ export default function JobDetails() {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [vendorProfile, setVendorProfile] = useState(null);
-  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -78,12 +74,6 @@ export default function JobDetails() {
         const record = await base44.entities.HelpRequest.get(jobId);
         if (!mounted) return;
         setJob(record || null);
-
-        if (record?.accepted_vendor_id) {
-          const vendorProfiles = await base44.entities.VendorProfile.filter({ user_id: record.accepted_vendor_id });
-          if (!mounted) return;
-          setVendorProfile(vendorProfiles?.[0] || null);
-        }
       } catch (err) {
         console.error(err);
         if (!mounted) return;
@@ -102,57 +92,9 @@ export default function JobDetails() {
     return (
       user?.subscription_status === 'active' ||
       user?.subscription_status === 'trialing' ||
-      user?.subscription_granted_by_admin ||
       !!user?.stripe_subscription_id
     );
-  }, [isPrivileged, user?.subscription_status, user?.subscription_granted_by_admin, user?.stripe_subscription_id]);
-
-  const isRequester = job?.requester_id === user?.email;
-  const isVendor = job?.accepted_vendor_id === user?.email;
-
-  const refreshJob = async () => {
-    const record = await base44.entities.HelpRequest.get(jobId);
-    setJob(record || null);
-  };
-
-  const updateJob = async (updates, successMessage) => {
-    if (!job?.id) return;
-    setActionLoading(true);
-    try {
-      await base44.entities.HelpRequest.update(job.id, updates);
-      await refreshJob();
-      if (successMessage) toast.success(successMessage);
-    } catch (err) {
-      toast.error(err?.message || 'Update failed');
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleMarkComplete = () =>
-    updateJob({ status: 'completed', job_status: 'done' }, 'Marked as complete');
-
-  const handleMarkPaid = () =>
-    updateJob({ payment_status: 'paid' }, 'Marked as paid');
-
-  const handleReopen = () =>
-    updateJob({ status: 'open', accepted_vendor_id: null, accepted_vendor_name: null, job_status: 'open' }, 'Job reopened and vendor cleared');
-
-  const handleReport = async () => {
-    if (!job?.accepted_vendor_id) return;
-    try {
-      await base44.entities.UserReport.create({
-        reporter_id: user.email,
-        reported_user_id: job.accepted_vendor_id,
-        reason: 'Issue with hired vendor',
-        help_request_id: job.id,
-        status: 'open'
-      });
-      toast.success('Report submitted to admins');
-    } catch (err) {
-      toast.error(err?.message || 'Failed to submit report');
-    }
-  };
+  }, [isPrivileged, user?.subscription_status, user?.stripe_subscription_id]);
 
   if (loading) return <LoadingScreen />;
   if (loadError) return <ErrorBox title="Unable to load job" error={loadError} onBack={() => navigate(-1)} />;
@@ -238,71 +180,6 @@ export default function JobDetails() {
           </div>
         </CardContent>
       </Card>
-
-      {job.accepted_vendor_id && (
-        <Card className="mb-6">
-          <CardHeader className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <User className="w-5 h-5 text-stone-500" />
-              <div>
-                <p className="text-sm text-stone-500">Hired Vendor</p>
-                <p className="text-lg font-semibold text-stone-900">{job.accepted_vendor_name || job.accepted_vendor_id}</p>
-                {vendorProfile?.service_types && (
-                  <p className="text-xs text-stone-500">{vendorProfile.service_types.join(', ')}</p>
-                )}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" asChild>
-                <Link to={createPageUrl(`Chat?jobId=${job.id}`)}>Message {isRequester ? 'vendor' : 'client'}</Link>
-              </Button>
-              {isRequester && (
-                <Button variant="outline" onClick={handleReport} disabled={actionLoading}>
-                  <Flag className="w-4 h-4 mr-2" />
-                  Report
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid md:grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg bg-stone-50">
-                <p className="text-xs text-stone-500">Status</p>
-                <p className="font-semibold text-stone-900 capitalize">{job.job_status || job.status}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-stone-50">
-                <p className="text-xs text-stone-500">Payment</p>
-                <p className="font-semibold text-stone-900">{job.payment_status === 'paid' ? 'Paid' : 'Pending'}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-stone-50">
-                <p className="text-xs text-stone-500">Clocked Hours</p>
-                <p className="font-semibold text-stone-900">{job.total_hours ? `${job.total_hours.toFixed(2)} hrs` : 'Not started'}</p>
-              </div>
-            </div>
-
-            {(isRequester || isPrivileged) && (
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={handleMarkComplete} disabled={actionLoading || job.status === 'completed'} className="bg-emerald-600 hover:bg-emerald-700">
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Mark Complete
-                </Button>
-                <Button onClick={handleMarkPaid} variant="outline" disabled={actionLoading || job.payment_status === 'paid'}>
-                  <Wallet className="w-4 h-4 mr-2" />
-                  Mark Paid
-                </Button>
-                <Button onClick={handleReopen} variant="ghost" disabled={actionLoading}>
-                  <Undo2 className="w-4 h-4 mr-2" />
-                  Cancel & Reopen
-                </Button>
-              </div>
-            )}
-
-            {(isVendor || isRequester || isPrivileged) && (
-              <TimeClockCard job={job} user={user} />
-            )}
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
