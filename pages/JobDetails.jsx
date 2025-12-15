@@ -6,9 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Clock, DollarSign, MapPin } from 'lucide-react';
+import { ArrowLeft, Clock, DollarSign, MapPin, Star, Repeat2, CheckCircle2, Wallet, UserRound } from 'lucide-react';
 import { format } from 'date-fns';
 import JobStatusIndicator from '@/components/jobs/JobStatusIndicator';
+import JobStatusCard from '@/components/job/JobStatusCard';
+import TimeClockCard from '@/components/job/TimeClockCard';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 function LoadingScreen() {
   return (
@@ -49,13 +53,11 @@ function DetailRow({ label, value }) {
 
 export default function JobDetails() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const jobId = searchParams.get('id');
 
   const [user, setUser] = useState(null);
-  const [job, setJob] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -65,39 +67,116 @@ export default function JobDetails() {
         const u = await base44.auth.me();
         if (!mounted) return;
         setUser(u || null);
-
-        if (!jobId) {
-          setLoadError('No job id provided');
-          return;
-        }
-
-        const record = await base44.entities.HelpRequest.get(jobId);
-        if (!mounted) return;
-        setJob(record || null);
       } catch (err) {
         console.error(err);
         if (!mounted) return;
-        setLoadError(err);
-      } finally {
-        if (mounted) setLoading(false);
+        setUser(null);
       }
     })();
 
-    return () => { mounted = false; };
-  }, [jobId]);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const {
+    data: job,
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['job'],
+    queryFn: async () => {
+      if (!jobId) throw new Error('No job id provided');
+      return base44.entities.HelpRequest.get(jobId);
+    },
+    enabled: !!jobId
+  });
+
+  const { data: acceptedProfile } = useQuery({
+    queryKey: ['acceptedProfile', job?.accepted_vendor_id],
+    queryFn: async () => {
+      const profiles = await base44.entities.VendorProfile.filter({ user_id: job.accepted_vendor_id });
+      return profiles?.[0] || null;
+    },
+    enabled: !!job?.accepted_vendor_id
+  });
+
+  const { data: acceptedReviews = [] } = useQuery({
+    queryKey: ['acceptedReviews', job?.accepted_vendor_id],
+    queryFn: async () => base44.entities.Review.filter({ reviewee_id: job.accepted_vendor_id }),
+    enabled: !!job?.accepted_vendor_id
+  });
+
+  const acceptedRating = useMemo(() => {
+    if (!acceptedReviews.length) return null;
+    const sum = acceptedReviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    return (sum / acceptedReviews.length).toFixed(1);
+  }, [acceptedReviews]);
 
   const isPrivileged = user?.role === 'admin' || user?.role === 'owner';
   const hasActiveSubscription = useMemo(() => {
     if (isPrivileged) return true;
+    if (user?.subscription_granted_by_admin) {
+      if (!user?.subscription_end_date) return true;
+      return new Date(user.subscription_end_date) > new Date();
+    }
     return (
       user?.subscription_status === 'active' ||
       user?.subscription_status === 'trialing' ||
       !!user?.stripe_subscription_id
     );
-  }, [isPrivileged, user?.subscription_status, user?.stripe_subscription_id]);
+  }, [isPrivileged, user?.subscription_end_date, user?.subscription_granted_by_admin, user?.subscription_status, user?.stripe_subscription_id]);
 
-  if (loading) return <LoadingScreen />;
-  if (loadError) return <ErrorBox title="Unable to load job" error={loadError} onBack={() => navigate(-1)} />;
+  const markComplete = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) return;
+      await base44.entities.HelpRequest.update(job.id, {
+        status: 'completed',
+        job_status: 'done'
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['job'] });
+      refetch();
+      toast.success('Marked as complete');
+    },
+    onError: (err) => toast.error(err?.message || 'Unable to mark complete')
+  });
+
+  const markPaid = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) return;
+      await base44.entities.HelpRequest.update(job.id, { payment_status: 'paid' });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['job'] });
+      refetch();
+      toast.success('Payment recorded');
+    },
+    onError: (err) => toast.error(err?.message || 'Unable to update payment')
+  });
+
+  const cancelHire = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) return;
+      await base44.entities.HelpRequest.update(job.id, {
+        accepted_vendor_id: null,
+        accepted_vendor_name: null,
+        status: 'open',
+        job_status: 'pending'
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['job'] });
+      refetch();
+      toast.success('Applicant removed and job reopened');
+    },
+    onError: (err) => toast.error(err?.message || 'Unable to cancel and repost')
+  });
+
+  if (isLoading) return <LoadingScreen />;
+  if (error) return <ErrorBox title="Unable to load job" error={error} onBack={() => navigate(-1)} />;
   if (!job) return <ErrorBox title="Job not found" error="This listing may have been removed." onBack={() => navigate(-1)} />;
 
   return (
@@ -180,6 +259,114 @@ export default function JobDetails() {
           </div>
         </CardContent>
       </Card>
+
+      {job.accepted_vendor_id ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <Card className="lg:col-span-2 border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-900">
+                <UserRound className="w-5 h-5" />
+                Hired Talent
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge variant="outline">{job.accepted_vendor_name || job.accepted_vendor_id}</Badge>
+                {acceptedRating && (
+                  <Badge className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                    <Star className="w-4 h-4" /> {acceptedRating} ({acceptedReviews.length} reviews)
+                  </Badge>
+                )}
+                {acceptedProfile?.business_name && <Badge variant="secondary">{acceptedProfile.business_name}</Badge>}
+              </div>
+
+              {acceptedProfile?.bio && (
+                <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">{acceptedProfile.bio}</p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" asChild>
+                  <Link to={createPageUrl(`PublicProfile?id=${acceptedProfile?.id || job.accepted_vendor_id}`)}>
+                    View Profile
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary">
+                  <Link to={createPageUrl(`Chat?jobId=${job.id}&user=${job.accepted_vendor_id}`)}>
+                    Message {job.accepted_vendor_name || 'applicant'}
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link to={createPageUrl(`ReportProblem?userId=${job.accepted_vendor_id}`)}>
+                    Report Applicant
+                  </Link>
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 text-sm text-stone-700">
+                  <Clock className="w-4 h-4 text-stone-500" />
+                  Status: {job.job_status ? job.job_status.replace(/_/g, ' ') : 'pending'}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-stone-700">
+                  <DollarSign className="w-4 h-4 text-stone-500" />
+                  Pay: {job.pay_amount || '—'} {job.payment_type === 'hourly' ? '/hr' : ''}
+                </div>
+                {job.total_hours && (
+                  <div className="flex items-center gap-2 text-sm text-stone-700">
+                    <Clock className="w-4 h-4 text-stone-500" />
+                    Hours: {job.total_hours}h
+                  </div>
+                )}
+                {job.payment_status && (
+                  <div className="flex items-center gap-2 text-sm text-stone-700">
+                    <Wallet className="w-4 h-4 text-stone-500" />
+                    Payment Status: {(job.payment_status || '').replace(/_/g, ' ')}
+                  </div>
+                )}
+              </div>
+
+              {job.requester_id === user?.email && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    className="border-amber-200 text-amber-700"
+                    onClick={() => cancelHire.mutate()}
+                    disabled={cancelHire.isLoading}
+                  >
+                    <Repeat2 className="w-4 h-4 mr-2" />
+                    Cancel applicant & reopen
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-purple-200 text-purple-700"
+                    onClick={() => markComplete.mutate()}
+                    disabled={markComplete.isLoading}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Mark job complete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-emerald-200 text-emerald-700"
+                    onClick={() => markPaid.mutate()}
+                    disabled={markPaid.isLoading}
+                  >
+                    <Wallet className="w-4 h-4 mr-2" />
+                    Mark paid
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <JobStatusCard job={job} user={user} />
+            <TimeClockCard job={job} user={user} />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
