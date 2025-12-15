@@ -124,13 +124,21 @@ function AssessmentContent({ assessment }) {
 
   const normalized = useMemo(() => {
     const a = assessment || {};
-    const risk_score = clamp(safeNumber(a.risk_score, 50), 0, 100);
+    const risk_score = clamp(safeNumber(a.risk_score, 35), 0, 100);
 
     // normalize label
-    const risk_label =
+    let risk_label =
       a.risk_label === 'likely_legitimate' || a.risk_label === 'likely_scam' || a.risk_label === 'unclear'
         ? a.risk_label
         : 'unclear';
+
+    if (risk_label === 'likely_scam' && risk_score < 60) {
+      risk_label = 'unclear';
+    }
+
+    if (risk_score < 40 && risk_label === 'unclear') {
+      risk_label = 'likely_legitimate';
+    }
 
     // normalize confidence
     const confidence =

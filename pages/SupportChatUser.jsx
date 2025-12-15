@@ -127,8 +127,11 @@ export default function SupportChatUser() {
 
   const handleSend = (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
-    sendMutation.mutate(newMessage);
+    const content = newMessage.trim();
+    if (!content || !user?.email) return;
+
+    setNewMessage('');
+    sendMutation.mutate(content);
   };
 
   if (!user) {

@@ -164,6 +164,8 @@ export default function PostRequest() {
     setStep((s) => (s === 'preview' ? 'form' : s === 'form' ? 'type' : 'type'));
   };
 
+  const isPrivileged = user?.role === 'admin' || user?.role === 'owner';
+
   /* ---------- submit ---------- */
 
   const handlePost = useCallback(async () => {
@@ -177,8 +179,8 @@ export default function PostRequest() {
         ...jobData,
         pay_amount: toNumberOrUndefined(jobData.pay_amount),
         requester_id: user.email,
-        requester_name: profile.full_name || user.email,
-        requester_business: profile.business_name || '',
+        requester_name: profile?.full_name || user.full_name || user.email,
+        requester_business: profile?.business_name || '',
         status: 'open'
       });
 
@@ -194,6 +196,11 @@ export default function PostRequest() {
     }
   }, [user, profile, jobData, isPosting, navigate]);
 
+  /* ---------- render ---------- */
+
+  const stepIndex = STEPS.findIndex((x) => x.id === step);
+  const progress = useMemo(() => ((stepIndex + 1) / STEPS.length) * 100, [stepIndex]);
+
   /* ---------- guards ---------- */
 
   if (loading) return <LoadingScreen />;
@@ -206,7 +213,7 @@ export default function PostRequest() {
     return <ErrorBox title="Not signed in" error="Please log in" onBack={() => navigate(-1)} />;
   }
 
-  if (!profile) {
+  if (!profile && !isPrivileged) {
     return (
       <div className="max-w-xl mx-auto p-6">
         <Card>
@@ -222,6 +229,7 @@ export default function PostRequest() {
   }
 
   const hasActiveSubscription =
+    isPrivileged ||
     user?.subscription_status === 'active' ||
     user?.subscription_status === 'trialing' ||
     !!user?.stripe_subscription_id;
@@ -233,11 +241,6 @@ export default function PostRequest() {
   if (profile.approval_status !== 'approved') {
     return <ErrorBox title="Profile under review" error="Pending approval" onBack={() => navigate(-1)} />;
   }
-
-  /* ---------- render ---------- */
-
-  const stepIndex = STEPS.findIndex((x) => x.id === step);
-  const progress = useMemo(() => ((stepIndex + 1) / STEPS.length) * 100, [stepIndex]);
 
   return (
     <div className="max-w-3xl mx-auto pb-8">
