@@ -5175,6 +5175,23 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </Link>
+
+        <Link to={createPageUrl('MyJobs')} className="block">
+          <Card className="border-stone-200 hover:shadow-md transition-shadow cursor-pointer">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-stone-500 dark:text-stone-400">Action Items</p>
+                  <p className="text-2xl font-bold text-stone-900 dark:text-stone-100 mt-1">{tasksCount}</p>
+                  <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">Confirm agreements & payments</p>
+                </div>
+                <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-indigo-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
       </div>
 
       {/* Upcoming Jobs */}

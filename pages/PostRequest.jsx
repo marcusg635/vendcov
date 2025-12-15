@@ -63,9 +63,32 @@ function ErrorBox({ title, error, onBack }) {
 
 const STEPS = [
   { id: 'type', label: 'Select Type' },
+  { id: 'assistant', label: 'AI Assistant' },
   { id: 'form', label: 'Details' },
   { id: 'preview', label: 'Review & Post' }
 ];
+
+function buildAiQuestions({ service_type, event_type }) {
+  const context = `${service_type || 'support'} for ${event_type || 'an event'}`;
+
+  return [
+    { id: 'title', prompt: `Give this ${context} job a clear title`, placeholder: 'e.g., Wedding Reception Bartender' },
+    { id: 'date', prompt: 'When is the event? (include date)', placeholder: 'July 18, 2024' },
+    { id: 'times', prompt: 'What are the start and end times?', placeholder: '3:00 PM - 9:00 PM' },
+    { id: 'location', prompt: 'Where is it happening? Include venue and city/state', placeholder: 'The Foxhall Venue, Austin, TX' },
+    { id: 'deliverables', prompt: 'What exactly do you need the pro to do?', placeholder: 'Setup bar, serve cocktails, manage cleanup' },
+    { id: 'requirements', prompt: 'Any requirements or preferences?', placeholder: 'Black attire, TABC required, bring shaker set' },
+    { id: 'pay', prompt: 'What is the pay and payment type?', placeholder: '$300 flat or $30/hr via Zelle' },
+    { id: 'parking', prompt: 'Parking/load-in instructions', placeholder: 'Park in vendor lot off 3rd St. Loading dock behind venue.' },
+    { id: 'extras', prompt: 'Any other notes you want included?', placeholder: 'Need help setting up 1 hour before guests arrive.' }
+  ];
+}
+
+function formatFromTimes(timesText = '') {
+  if (!timesText.includes('-')) return { start: '', end: '' };
+  const [start, end] = timesText.split('-').map((s) => s.trim());
+  return { start, end };
+}
 
 export default function PostRequest() {
   const navigate = useNavigate();
@@ -78,6 +101,8 @@ export default function PostRequest() {
 
   const [step, setStep] = useState('type');
   const [isPosting, setIsPosting] = useState(false);
+  const [assistantStep, setAssistantStep] = useState(0);
+  const [aiAnswers, setAiAnswers] = useState({});
 
   const [jobData, setJobData] = useState({
     service_type: '',
@@ -268,6 +293,41 @@ export default function PostRequest() {
             />
           )}
 
+          {step === 'assistant' && (
+            <div className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm text-stone-500">AI will collect the details for you</p>
+                  <h3 className="text-lg font-semibold text-stone-900">Tell us about your {jobData.service_type || 'job'}</h3>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setStep('form')}>
+                  Skip AI & Fill Manually
+                </Button>
+              </div>
+
+              <div className="p-4 rounded-lg border bg-stone-50">
+                <p className="text-xs uppercase text-stone-500 mb-2">Question {assistantStep + 1} of {assistantQuestions.length}</p>
+                <p className="font-medium text-stone-900 mb-3">{currentQuestion?.prompt}</p>
+                <textarea
+                  value={aiAnswers[currentQuestion?.id] || ''}
+                  onChange={(e) => setAiAnswers((prev) => ({ ...prev, [currentQuestion.id]: e.target.value }))}
+                  placeholder={currentQuestion?.placeholder}
+                  className="w-full rounded border border-stone-200 p-3 focus:outline-none focus:ring-2 focus:ring-stone-900"
+                  rows={4}
+                />
+              </div>
+
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={handleAiBack}>
+                  Back
+                </Button>
+                <Button onClick={handleAiNext} disabled={!aiAnswers[currentQuestion?.id]?.trim()}>
+                  {assistantStep === assistantQuestions.length - 1 ? 'Generate Preview' : 'Next'}
+                </Button>
+              </div>
+            </div>
+          )}
+
           {step === 'form' && (
             <ManualJobForm
               jobData={jobData}
@@ -290,17 +350,19 @@ export default function PostRequest() {
       </Card>
 
       {/* bottom nav */}
-      <div className="flex justify-between mt-6">
-        <Button variant="outline" onClick={goBack} disabled={step === 'type'}>
-          Back
-        </Button>
-
-        {step !== 'preview' && (
-          <Button onClick={goNext} disabled={step === 'type' && !hasChosenTypes}>
-            Next
+      {step !== 'assistant' && (
+        <div className="flex justify-between mt-6">
+          <Button variant="outline" onClick={goBack} disabled={step === 'type'}>
+            Back
           </Button>
-        )}
-      </div>
+
+          {step !== 'preview' && (
+            <Button onClick={goNext} disabled={step === 'type' && !hasChosenTypes}>
+              Next
+            </Button>
+          )}
+        </div>
+      )}
 
       {step === 'type' && !hasChosenTypes && (
         <p className="text-xs text-amber-600 text-center mt-3">

@@ -27,7 +27,13 @@ export default function SupportChatUser() {
     loadUser();
   }, []);
 
-  const hasActiveSubscription = user?.subscription_status === 'active' || user?.subscription_status === 'trialing' || user?.stripe_subscription_id;
+  const isPrivileged = user?.role === 'admin' || user?.role === 'owner';
+  const hasActiveSubscription =
+    isPrivileged ||
+    user?.subscription_status === 'active' ||
+    user?.subscription_status === 'trialing' ||
+    user?.subscription_granted_by_admin ||
+    user?.stripe_subscription_id;
 
   // Get active chat
   const { data: chat } = useQuery({

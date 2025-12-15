@@ -53,6 +53,16 @@ export default function AdminChat() {
     refetchInterval: 3000
   });
 
+  const dedupedMessages = useMemo(() => {
+    const seen = new Set();
+    return (messages || []).filter((m) => {
+      const key = `${m.sender_id}-${m.content}-${m.created_date}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [messages]);
+
   // Mark messages as read
   useEffect(() => {
     const markAsRead = async () => {
