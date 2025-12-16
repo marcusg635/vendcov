@@ -8,19 +8,18 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
-  ArrowLeft,
+  ArrowLeft as BackIcon,
+  CheckCircle2,
   Clock,
   DollarSign,
-  MapPin,
-  Star,
-  Repeat2,
-  CheckCircle2,
-  Wallet,
-  UserRound,
   FileText,
-  Paperclip
+  MapPin,
+  Paperclip,
+  Repeat2,
+  Star,
+  UserRound,
+  Wallet
 } from 'lucide-react';
-import { ArrowLeft, Clock, DollarSign, MapPin, Star, Repeat2, CheckCircle2, Wallet, UserRound } from 'lucide-react';
 import { format } from 'date-fns';
 import JobStatusIndicator from '@/components/jobs/JobStatusIndicator';
 import JobStatusCard from '@/components/job/JobStatusCard';
@@ -245,7 +244,7 @@ export default function JobDetails() {
     <div className="max-w-4xl mx-auto pb-10">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeftIcon />
+          <BackIcon />
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Job Details</h1>
@@ -346,7 +345,6 @@ export default function JobDetails() {
       )}
 
       {job.accepted_vendor_id && canSeePrivateDetails ? (
-      {job.accepted_vendor_id ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
           <Card className="lg:col-span-2 border-blue-200">
             <CardHeader>
