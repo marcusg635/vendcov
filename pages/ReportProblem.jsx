@@ -14,16 +14,23 @@ import { MessageSquare, Send, CheckCircle2, Clock, XCircle, Loader2 } from 'luci
 export default function ReportProblem() {
   const queryClient = useQueryClient();
 
+  const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const reportedUserId = searchParams.get('userId');
+  const reportedUserName = searchParams.get('userName');
+  const intentType = searchParams.get('type');
+  const isUserReport = intentType === 'user_report' || !!reportedUserId;
+
   const [user, setUser] = useState(null);
   const [loadingUser, setLoadingUser] = useState(true);
 
   const [submitting, setSubmitting] = useState(false);
 
-  const [formData, setFormData] = useState({
-    type: 'bug',
+  const [formData, setFormData] = useState(() => ({
+    type: isUserReport ? 'user_report' : 'bug',
     title: '',
-    description: ''
-  });
+    description: '',
+    reported_user_id: reportedUserId || ''
+  }));
 
   useEffect(() => {
     let mounted = true;
@@ -60,7 +67,8 @@ export default function ReportProblem() {
       bug: 'Bug Report',
       suggestion: 'Suggestion',
       feature_request: 'Feature Request',
-      other: 'Other'
+      other: 'Other',
+      user_report: 'Report User'
     }),
     []
   );
@@ -90,8 +98,10 @@ export default function ReportProblem() {
         user_id: user.email,
         user_name: user.full_name,
         user_email: user.email,
+        reported_user_id: data.reported_user_id || null,
+        reported_user_name: reportedUserName || null,
         status: 'open',
-admin_id: null
+        admin_id: null
 
       });
 
@@ -181,8 +191,12 @@ admin_id: null
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-stone-900">Report a Problem</h1>
-        <p className="text-stone-600 mt-1">Submit bugs, suggestions, or feature requests</p>
+        <h1 className="text-2xl font-bold text-stone-900">{isUserReport ? 'Report a User' : 'Report a Problem'}</h1>
+        <p className="text-stone-600 mt-1">
+          {isUserReport
+            ? 'Flag behavior or safety concerns about this user.'
+            : 'Submit bugs, suggestions, or feature requests'}
+        </p>
       </div>
 
       <Card className="border-stone-200">
@@ -200,6 +214,7 @@ admin_id: null
               <Select
                 value={formData.type}
                 onValueChange={(value) => setFormData((prev) => ({ ...prev, type: value }))}
+                disabled={isUserReport}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -209,8 +224,12 @@ admin_id: null
                   <SelectItem value="suggestion">Suggestion</SelectItem>
                   <SelectItem value="feature_request">Feature Request</SelectItem>
                   <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="user_report">Report User</SelectItem>
                 </SelectContent>
               </Select>
+              {isUserReport && (
+                <p className="text-xs text-stone-500">You’re reporting {reportedUserName || reportedUserId || 'this user'}.</p>
+              )}
             </div>
 
             <div className="space-y-2">

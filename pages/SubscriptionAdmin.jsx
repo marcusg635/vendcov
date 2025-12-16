@@ -51,7 +51,7 @@ export default function SubscriptionAdmin() {
   });
 
   // Base44 user objects can vary; be defensive
-  const getUserId = (u) => u?.id ?? u?._id ?? u?.user_id ?? null;
+  const getUserId = (u) => u?.id ?? u?._id ?? u?.user_id ?? u?.email ?? null;
 
   const grantMutation = useMutation({
     mutationFn: async ({ userId, months }) => {
