@@ -388,12 +388,34 @@ export default function JobDetails() {
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="border-blue-200">
+              <div className="flex flex-wrap items-center gap-3">
+                <Badge variant="outline">{job.accepted_vendor_name || job.accepted_vendor_id}</Badge>
+                {acceptedRating && (
+                  <Badge className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                    <Star className="w-4 h-4" /> {acceptedRating} ({acceptedReviews.length} reviews)
+                  </Badge>
+                )}
+                {acceptedProfile?.business_name && <Badge variant="secondary">{acceptedProfile.business_name}</Badge>}
+              </div>
+
+              {acceptedProfile?.bio && (
+                <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line">{acceptedProfile.bio}</p>
+              )}
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" asChild>
+                  <Link to={createPageUrl(`PublicProfile?id=${acceptedProfile?.id || job.accepted_vendor_id}`)}>
+                    View Profile
+                  </Link>
+                </Button>
+                <Button asChild variant="secondary">
                   <Link to={createPageUrl(`Chat?jobId=${job.id}&user=${job.accepted_vendor_id}`)}>
                     Message {job.accepted_vendor_name || 'applicant'}
                   </Link>
                 </Button>
                 <Button variant="outline" asChild>
                   <Link to={createPageUrl(`ReportProblem?userId=${job.accepted_vendor_id}&type=user_report`)}>
+                  <Link to={createPageUrl(`ReportProblem?userId=${job.accepted_vendor_id}`)}>
                     Report Applicant
                   </Link>
                 </Button>
@@ -425,12 +447,14 @@ export default function JobDetails() {
               </div>
 
               {(job.requester_id === user?.email || job.accepted_vendor_id === user?.email) && (
+              {job.requester_id === user?.email && (
                 <div className="flex flex-wrap gap-2 pt-2">
                   <Button
                     variant="outline"
                     className="border-amber-200 text-amber-700"
                     onClick={() => cancelHire.mutate()}
                     disabled={cancelHire.isLoading || job.requester_id !== user?.email}
+                    disabled={cancelHire.isLoading}
                   >
                     <Repeat2 className="w-4 h-4 mr-2" />
                     Cancel applicant & reopen
@@ -449,6 +473,7 @@ export default function JobDetails() {
                     className="border-emerald-200 text-emerald-700"
                     onClick={() => markPaid.mutate()}
                     disabled={markPaid.isLoading || job.requester_id !== user?.email}
+                    disabled={markPaid.isLoading}
                   >
                     <Wallet className="w-4 h-4 mr-2" />
                     Mark paid
@@ -462,104 +487,103 @@ export default function JobDetails() {
               <JobStatusCard job={job} user={user} />
               <TimeClockCard job={job} user={user} />
 
-              <Card className="border-stone-200">
-                <CardHeader>
-                  <CardTitle className="text-lg">Hiring Contact</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      {requesterProfile?.selfie_url ? (
-                        <img src={requesterProfile.selfie_url} alt={job.requester_name || 'Requester'} className="w-full h-full object-cover" />
-                      ) : (
-                        <AvatarFallback className="bg-stone-100 text-stone-600">
-                          {(requesterProfile?.full_name || job.requester_name || 'R')?.[0]}
-                        </AvatarFallback>
-                      )}
-                    </Avatar>
-                    <div>
-                      <p className="font-semibold text-stone-900">{job.requester_name || job.requester_id}</p>
-                      {requesterProfile?.business_name && (
-                        <p className="text-sm text-stone-600">{requesterProfile.business_name}</p>
-                      )}
-                    </div>
+            <Card className="border-stone-200">
+              <CardHeader>
+                <CardTitle className="text-lg">Hiring Contact</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    {requesterProfile?.selfie_url ? (
+                      <img src={requesterProfile.selfie_url} alt={job.requester_name || 'Requester'} className="w-full h-full object-cover" />
+                    ) : (
+                      <AvatarFallback className="bg-stone-100 text-stone-600">
+                        {(requesterProfile?.full_name || job.requester_name || 'R')?.[0]}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-stone-900">{job.requester_name || job.requester_id}</p>
+                    {requesterProfile?.business_name && (
+                      <p className="text-sm text-stone-600">{requesterProfile.business_name}</p>
+                    )}
                   </div>
+                </div>
 
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" asChild>
-                      <Link to={createPageUrl(`PublicProfile?userId=${job.requester_id}`)}>
-                        View Profile
-                      </Link>
-                    </Button>
-                    <Button variant="outline" className="border-blue-200" asChild>
-                      <Link to={createPageUrl(`Chat?jobId=${job.id}&user=${job.requester_id}`)}>
-                        Message Poster
-                      </Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link to={createPageUrl(`ReportProblem?userId=${job.requester_id}&type=user_report`)}>
-                        Report Poster
-                      </Link>
-                    </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" asChild>
+                    <Link to={createPageUrl(`PublicProfile?userId=${job.requester_id}`)}>
+                      View Profile
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="border-blue-200" asChild>
+                    <Link to={createPageUrl(`Chat?jobId=${job.id}&user=${job.requester_id}`)}>
+                      Message Poster
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to={createPageUrl(`ReportProblem?userId=${job.requester_id}&type=user_report`)}>
+                      Report Poster
+                    </Link>
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" asChild>
+                    <Link to={createPageUrl(`Agreement?jobId=${job.id}`)}>
+                      View signed agreement
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-purple-200 text-purple-700"
+                    onClick={() => markComplete.mutate()}
+                    disabled={markComplete.isLoading}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Mark complete
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-stone-200">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Paperclip className="w-4 h-4" />
+                  Shared Documents
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-stone-600">Upload files for both parties to access.</p>
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadDocument.mutate(file);
+                  }}
+                  disabled={uploadDocument.isLoading}
+                />
+
+                {Array.isArray(job?.shared_documents) && job.shared_documents.length > 0 ? (
+                  <div className="space-y-2">
+                    {job.shared_documents.map((doc, idx) => (
+                      <a
+                        key={idx}
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-blue-700 hover:underline"
+                      >
+                        <FileText className="w-4 h-4" /> {doc.name || `Document ${idx + 1}`} (uploaded by {doc.uploaded_by || '—'})
+                      </a>
+                    ))}
                   </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button variant="outline" asChild>
-                      <Link to={createPageUrl(`Agreement?jobId=${job.id}`)}>
-                        View signed agreement
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="border-purple-200 text-purple-700"
-                      onClick={() => markComplete.mutate()}
-                      disabled={markComplete.isLoading}
-                    >
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Mark complete
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-stone-200">
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Paperclip className="w-4 h-4" />
-                    Shared Documents
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-stone-600">Upload files for both parties to access.</p>
-                  <input
-                    type="file"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadDocument.mutate(file);
-                    }}
-                    disabled={uploadDocument.isLoading}
-                  />
-
-                  {Array.isArray(job?.shared_documents) && job.shared_documents.length > 0 ? (
-                    <div className="space-y-2">
-                      {job.shared_documents.map((doc, idx) => (
-                        <a
-                          key={idx}
-                          href={doc.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-sm text-blue-700 hover:underline"
-                        >
-                          <FileText className="w-4 h-4" /> {doc.name || `Document ${idx + 1}`} (uploaded by {doc.uploaded_by || '—'})
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-stone-500">No documents uploaded yet.</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                ) : (
+                  <p className="text-sm text-stone-500">No documents uploaded yet.</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       ) : null}
@@ -569,6 +593,16 @@ export default function JobDetails() {
           <JobStatusCard job={job} user={user} />
         </div>
       )}
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <JobStatusCard job={job} user={user} />
+            <TimeClockCard job={job} user={user} />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
