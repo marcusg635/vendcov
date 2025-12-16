@@ -179,17 +179,34 @@ export default function PostRequest() {
     setJobData((prev) => ({ ...prev, ...updates }));
   }, []);
 
+  const assistantQuestions = useMemo(() => buildAiQuestions(jobData), [jobData.event_type, jobData.service_type]);
+  const currentQuestion = assistantQuestions[assistantStep];
+
   const hasChosenTypes = !!jobData.service_type && !!jobData.event_type;
 
   const goNext = () => {
-    setStep((s) => (s === 'type' ? 'form' : s === 'form' ? 'preview' : 'preview'));
+    setStep((s) => {
+      if (s === 'type') return 'assistant';
+      if (s === 'assistant') return 'form';
+      if (s === 'form') return 'preview';
+      return 'preview';
+    });
   };
 
   const goBack = () => {
-    setStep((s) => (s === 'preview' ? 'form' : s === 'form' ? 'type' : 'type'));
+    setStep((s) => {
+      if (s === 'preview') return 'form';
+      if (s === 'form') return 'assistant';
+      return 'type';
+    });
   };
 
   const isPrivileged = user?.role === 'admin' || user?.role === 'owner';
+  const isAdminGrantedSubscription = useMemo(() => {
+    if (!user?.subscription_granted_by_admin) return false;
+    if (!user?.subscription_end_date) return true;
+    return new Date(user.subscription_end_date) > new Date();
+  }, [user?.subscription_end_date, user?.subscription_granted_by_admin]);
 
   /* ---------- submit ---------- */
 
@@ -223,6 +240,58 @@ export default function PostRequest() {
 
   /* ---------- render ---------- */
 
+  const applyAiAnswersToForm = useCallback(() => {
+    const times = formatFromTimes(aiAnswers.times);
+    const locationText = aiAnswers.location || '';
+    const locationParts = locationText.split(',');
+    const city = locationParts.length >= 2 ? locationParts[locationParts.length - 2].trim() : '';
+    const state = locationParts.length >= 2 ? locationParts[locationParts.length - 1].trim() : '';
+    const venue = locationParts[0]?.trim() || '';
+
+    const numericPay = (() => {
+      const match = (aiAnswers.pay || '').match(/\$?\s*([0-9]+(?:\.[0-9]{1,2})?)/);
+      return match ? match[1] : jobData.pay_amount;
+    })();
+
+    updateJobData({
+      title: aiAnswers.title || jobData.title,
+      description: [aiAnswers.deliverables, aiAnswers.extras].filter(Boolean).join('\n\n') || jobData.description,
+      event_date: aiAnswers.date || jobData.event_date,
+      event_start_time: times.start || jobData.event_start_time,
+      event_end_time: times.end || jobData.event_end_time,
+      venue_name: venue || jobData.venue_name,
+      full_address: locationText || jobData.full_address,
+      city: city || jobData.city,
+      state: state || jobData.state,
+      requirements: aiAnswers.requirements || jobData.requirements,
+      parking_info: aiAnswers.parking || jobData.parking_info,
+      additional_notes: aiAnswers.extras || jobData.additional_notes,
+      pay_amount: numericPay,
+      ai_generated_questions: assistantQuestions.map((q) => ({
+        id: q.id,
+        prompt: q.prompt,
+        answer: aiAnswers[q.id] || ''
+      }))
+    });
+  }, [aiAnswers, assistantQuestions, jobData, updateJobData]);
+
+  const handleAiNext = useCallback(() => {
+    if (assistantStep === assistantQuestions.length - 1) {
+      applyAiAnswersToForm();
+      setStep('preview');
+      return;
+    }
+    setAssistantStep((s) => Math.min(s + 1, assistantQuestions.length - 1));
+  }, [applyAiAnswersToForm, assistantQuestions.length, assistantStep]);
+
+  const handleAiBack = useCallback(() => {
+    if (assistantStep === 0) {
+      setStep('type');
+      return;
+    }
+    setAssistantStep((s) => Math.max(s - 1, 0));
+  }, [assistantStep]);
+
   const stepIndex = STEPS.findIndex((x) => x.id === step);
   const progress = useMemo(() => ((stepIndex + 1) / STEPS.length) * 100, [stepIndex]);
 
@@ -255,6 +324,7 @@ export default function PostRequest() {
 
   const hasActiveSubscription =
     isPrivileged ||
+    isAdminGrantedSubscription ||
     user?.subscription_status === 'active' ||
     user?.subscription_status === 'trialing' ||
     !!user?.stripe_subscription_id;
@@ -263,7 +333,7 @@ export default function PostRequest() {
     return <SubscriptionGate user={user} feature="job posting" />;
   }
 
-  if (profile.approval_status !== 'approved') {
+  if (profile && profile.approval_status !== 'approved') {
     return <ErrorBox title="Profile under review" error="Pending approval" onBack={() => navigate(-1)} />;
   }
 
