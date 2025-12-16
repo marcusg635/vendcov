@@ -61,7 +61,9 @@ export default function JobStatusCard({ job, user }) {
     }
   });
 
-  const canUpdateStatus = job.accepted_vendor_id === user?.email && job.status === 'filled';
+  const canUpdateStatus =
+    (job.accepted_vendor_id === user?.email || job.requester_id === user?.email) &&
+    (job.status === 'filled' || job.status === 'open');
 
   return (
     <Card className="border-stone-200">

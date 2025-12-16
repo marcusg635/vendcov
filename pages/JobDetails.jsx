@@ -6,9 +6,26 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Clock, DollarSign, MapPin } from 'lucide-react';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  ArrowLeft as ArrowLeftIcon,
+  CheckCircle2,
+  Clock,
+  DollarSign,
+  FileText,
+  MapPin,
+  Paperclip,
+  Repeat2,
+  Star,
+  UserRound,
+  Wallet
+} from 'lucide-react';
 import { format } from 'date-fns';
 import JobStatusIndicator from '@/components/jobs/JobStatusIndicator';
+import JobStatusCard from '@/components/job/JobStatusCard';
+import TimeClockCard from '@/components/job/TimeClockCard';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 function LoadingScreen() {
   return (
@@ -49,13 +66,11 @@ function DetailRow({ label, value }) {
 
 export default function JobDetails() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const jobId = searchParams.get('id');
 
   const [user, setUser] = useState(null);
-  const [job, setJob] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -65,46 +80,171 @@ export default function JobDetails() {
         const u = await base44.auth.me();
         if (!mounted) return;
         setUser(u || null);
-
-        if (!jobId) {
-          setLoadError('No job id provided');
-          return;
-        }
-
-        const record = await base44.entities.HelpRequest.get(jobId);
-        if (!mounted) return;
-        setJob(record || null);
       } catch (err) {
         console.error(err);
         if (!mounted) return;
-        setLoadError(err);
-      } finally {
-        if (mounted) setLoading(false);
+        setUser(null);
       }
     })();
 
-    return () => { mounted = false; };
-  }, [jobId]);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const {
+    data: job,
+    isLoading,
+    error,
+    refetch
+  } = useQuery({
+    queryKey: ['job'],
+    queryFn: async () => {
+      if (!jobId) throw new Error('No job id provided');
+      return base44.entities.HelpRequest.get(jobId);
+    },
+    enabled: !!jobId
+  });
+
+  const { data: acceptedProfile } = useQuery({
+    queryKey: ['acceptedProfile', job?.accepted_vendor_id],
+    queryFn: async () => {
+      const profiles = await base44.entities.VendorProfile.filter({ user_id: job.accepted_vendor_id });
+      return profiles?.[0] || null;
+    },
+    enabled: !!job?.accepted_vendor_id
+  });
+
+  const { data: acceptedReviews = [] } = useQuery({
+    queryKey: ['acceptedReviews', job?.accepted_vendor_id],
+    queryFn: async () => base44.entities.Review.filter({ reviewee_id: job.accepted_vendor_id }),
+    enabled: !!job?.accepted_vendor_id
+  });
+
+  const acceptedRating = useMemo(() => {
+    if (!acceptedReviews.length) return null;
+    const sum = acceptedReviews.reduce((acc, r) => acc + (Number(r.rating) || 0), 0);
+    return (sum / acceptedReviews.length).toFixed(1);
+  }, [acceptedReviews]);
+
+  const { data: myApplication } = useQuery({
+    queryKey: ['myApplicationStatus', jobId, user?.email],
+    queryFn: async () => {
+      const apps = await base44.entities.JobApplication.filter({
+        help_request_id: jobId,
+        applicant_id: user.email
+      });
+      return apps?.[0] || null;
+    },
+    enabled: !!jobId && !!user?.email
+  });
 
   const isPrivileged = user?.role === 'admin' || user?.role === 'owner';
   const hasActiveSubscription = useMemo(() => {
     if (isPrivileged) return true;
+    if (user?.subscription_granted_by_admin) {
+      if (!user?.subscription_end_date) return true;
+      return new Date(user.subscription_end_date) > new Date();
+    }
     return (
       user?.subscription_status === 'active' ||
       user?.subscription_status === 'trialing' ||
       !!user?.stripe_subscription_id
     );
-  }, [isPrivileged, user?.subscription_status, user?.stripe_subscription_id]);
+  }, [isPrivileged, user?.subscription_end_date, user?.subscription_granted_by_admin, user?.subscription_status, user?.stripe_subscription_id]);
 
-  if (loading) return <LoadingScreen />;
-  if (loadError) return <ErrorBox title="Unable to load job" error={loadError} onBack={() => navigate(-1)} />;
+  const isRequester = job?.requester_id === user?.email;
+  const isAcceptedVendor = job?.accepted_vendor_id === user?.email;
+  const canSeePrivateDetails = isRequester || isAcceptedVendor;
+
+  const { data: requesterProfile } = useQuery({
+    queryKey: ['requesterProfile', job?.requester_id],
+    queryFn: async () => {
+      const profiles = await base44.entities.VendorProfile.filter({ user_id: job.requester_id });
+      return profiles?.[0] || null;
+    },
+    enabled: !!job?.requester_id
+  });
+
+  const markComplete = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) return;
+      await base44.entities.HelpRequest.update(job.id, {
+        status: 'completed',
+        job_status: 'done'
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['job'] });
+      refetch();
+      toast.success('Marked as complete');
+    },
+    onError: (err) => toast.error(err?.message || 'Unable to mark complete')
+  });
+
+  const markPaid = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) return;
+      await base44.entities.HelpRequest.update(job.id, { payment_status: 'paid' });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['job'] });
+      refetch();
+      toast.success('Payment recorded');
+    },
+    onError: (err) => toast.error(err?.message || 'Unable to update payment')
+  });
+
+  const cancelHire = useMutation({
+    mutationFn: async () => {
+      if (!job?.id) return;
+      await base44.entities.HelpRequest.update(job.id, {
+        accepted_vendor_id: null,
+        accepted_vendor_name: null,
+        status: 'open',
+        job_status: 'pending'
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['job'] });
+      refetch();
+      toast.success('Applicant removed and job reopened');
+    },
+    onError: (err) => toast.error(err?.message || 'Unable to cancel and repost')
+  });
+
+  const uploadDocument = useMutation({
+    mutationFn: async (file) => {
+      const upload = await base44.integrations.Core.UploadFile({ file });
+      const docs = Array.isArray(job?.shared_documents) ? job.shared_documents : [];
+
+      const newDoc = {
+        url: upload.file_url,
+        name: file.name,
+        uploaded_by: user?.email,
+        uploaded_at: new Date().toISOString()
+      };
+
+      await base44.entities.HelpRequest.update(job.id, {
+        shared_documents: [...docs, newDoc]
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['job'] });
+      toast.success('Document uploaded');
+    },
+    onError: (err) => toast.error(err?.message || 'Failed to upload document')
+  });
+
+  if (isLoading) return <LoadingScreen />;
+  if (error) return <ErrorBox title="Unable to load job" error={error} onBack={() => navigate(-1)} />;
   if (!job) return <ErrorBox title="Job not found" error="This listing may have been removed." onBack={() => navigate(-1)} />;
 
   return (
     <div className="max-w-4xl mx-auto pb-10">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft />
+          <ArrowLeftIcon />
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Job Details</h1>
@@ -148,7 +288,14 @@ export default function JobDetails() {
           <Separator />
 
           <DetailRow label="Description" value={job.description} />
-          <DetailRow label="Venue" value={job.venue_name || job.full_address} />
+          <DetailRow
+            label="Venue"
+            value={
+              canSeePrivateDetails
+                ? job.venue_name || job.full_address
+                : job.venue_name || [job.city, job.state].filter(Boolean).join(', ') || 'Exact location shared after hire'
+            }
+          />
           <DetailRow label="Schedule" value={[job.event_start_time, job.event_end_time].filter(Boolean).join(' - ')} />
           <DetailRow label="Requirements" value={job.requirements} />
           <DetailRow label="Attire" value={job.attire} />
@@ -180,6 +327,247 @@ export default function JobDetails() {
           </div>
         </CardContent>
       </Card>
+
+      {myApplication?.status === 'declined' && (
+        <Card className="border-red-200 bg-red-50 mb-4">
+          <CardContent className="p-4 text-sm text-red-800">
+            Your application for this job was not selected.
+          </CardContent>
+        </Card>
+      )}
+
+      {job.accepted_vendor_id && !canSeePrivateDetails && (
+        <Card className="border-stone-200 bg-stone-50 mb-6">
+          <CardContent className="p-4 text-sm text-stone-700">
+            This job has been filled. Details like status, time clock, and applicant info are available only to the requester and the accepted applicant.
+          </CardContent>
+        </Card>
+      )}
+
+      {job.accepted_vendor_id && canSeePrivateDetails ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <Card className="lg:col-span-2 border-blue-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-900">
+                <UserRound className="w-5 h-5" />
+                Hired Talent
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-12 w-12">
+                  {acceptedProfile?.selfie_url ? (
+                    <img src={acceptedProfile.selfie_url} alt={acceptedProfile.full_name || 'Applicant'} className="w-full h-full object-cover" />
+                  ) : (
+                    <AvatarFallback className="bg-stone-100 text-stone-600 text-lg">
+                      {acceptedProfile?.full_name?.[0] || 'A'}
+                    </AvatarFallback>
+                  )}
+                </Avatar>
+
+                <div className="flex-1">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Badge variant="outline">{job.accepted_vendor_name || job.accepted_vendor_id}</Badge>
+                    {acceptedRating && (
+                      <Badge className="bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                        <Star className="w-4 h-4" /> {acceptedRating} ({acceptedReviews.length} reviews)
+                      </Badge>
+                    )}
+                    {acceptedProfile?.business_name && <Badge variant="secondary">{acceptedProfile.business_name}</Badge>}
+                  </div>
+                  {acceptedProfile?.bio && (
+                    <p className="text-sm text-stone-700 leading-relaxed whitespace-pre-line mt-2">{acceptedProfile.bio}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" asChild>
+                  <Link to={createPageUrl(`PublicProfile?userId=${acceptedProfile?.user_id || job.accepted_vendor_id}`)}>
+                    View Profile
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="border-blue-200">
+                  <Link to={createPageUrl(`Chat?jobId=${job.id}&user=${job.accepted_vendor_id}`)}>
+                    Message {job.accepted_vendor_name || 'applicant'}
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link to={createPageUrl(`ReportProblem?userId=${job.accepted_vendor_id}&type=user_report`)}>
+                    Report Applicant
+                  </Link>
+                </Button>
+              </div>
+
+              <Separator />
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div className="flex items-center gap-2 text-sm text-stone-700">
+                  <Clock className="w-4 h-4 text-stone-500" />
+                  Status: {job.job_status ? job.job_status.replace(/_/g, ' ') : 'pending'}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-stone-700">
+                  <DollarSign className="w-4 h-4 text-stone-500" />
+                  Pay: {job.pay_amount || '—'} {job.payment_type === 'hourly' ? '/hr' : ''}
+                </div>
+                {job.total_hours && (
+                  <div className="flex items-center gap-2 text-sm text-stone-700">
+                    <Clock className="w-4 h-4 text-stone-500" />
+                    Hours: {job.total_hours}h
+                  </div>
+                )}
+                {job.payment_status && (
+                  <div className="flex items-center gap-2 text-sm text-stone-700">
+                    <Wallet className="w-4 h-4 text-stone-500" />
+                    Payment Status: {(job.payment_status || '').replace(/_/g, ' ')}
+                  </div>
+                )}
+              </div>
+
+              {(job.requester_id === user?.email || job.accepted_vendor_id === user?.email) && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    className="border-amber-200 text-amber-700"
+                    onClick={() => cancelHire.mutate()}
+                    disabled={cancelHire.isLoading || job.requester_id !== user?.email}
+                  >
+                    <Repeat2 className="w-4 h-4 mr-2" />
+                    Cancel applicant & reopen
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-purple-200 text-purple-700"
+                    onClick={() => markComplete.mutate()}
+                    disabled={markComplete.isLoading}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Mark job complete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-emerald-200 text-emerald-700"
+                    onClick={() => markPaid.mutate()}
+                    disabled={markPaid.isLoading || job.requester_id !== user?.email}
+                  >
+                    <Wallet className="w-4 h-4 mr-2" />
+                    Mark paid
+                  </Button>
+                </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+              <JobStatusCard job={job} user={user} />
+              <TimeClockCard job={job} user={user} />
+
+            <Card className="border-stone-200">
+              <CardHeader>
+                <CardTitle className="text-lg">Hiring Contact</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-10 w-10">
+                    {requesterProfile?.selfie_url ? (
+                      <img src={requesterProfile.selfie_url} alt={job.requester_name || 'Requester'} className="w-full h-full object-cover" />
+                    ) : (
+                      <AvatarFallback className="bg-stone-100 text-stone-600">
+                        {(requesterProfile?.full_name || job.requester_name || 'R')?.[0]}
+                      </AvatarFallback>
+                    )}
+                  </Avatar>
+                  <div>
+                    <p className="font-semibold text-stone-900">{job.requester_name || job.requester_id}</p>
+                    {requesterProfile?.business_name && (
+                      <p className="text-sm text-stone-600">{requesterProfile.business_name}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" asChild>
+                    <Link to={createPageUrl(`PublicProfile?userId=${job.requester_id}`)}>
+                      View Profile
+                    </Link>
+                  </Button>
+                  <Button variant="outline" className="border-blue-200" asChild>
+                    <Link to={createPageUrl(`Chat?jobId=${job.id}&user=${job.requester_id}`)}>
+                      Message Poster
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link to={createPageUrl(`ReportProblem?userId=${job.requester_id}&type=user_report`)}>
+                      Report Poster
+                    </Link>
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" asChild>
+                    <Link to={createPageUrl(`Agreement?jobId=${job.id}`)}>
+                      View signed agreement
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-purple-200 text-purple-700"
+                    onClick={() => markComplete.mutate()}
+                    disabled={markComplete.isLoading}
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Mark complete
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-stone-200">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Paperclip className="w-4 h-4" />
+                  Shared Documents
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-stone-600">Upload files for both parties to access.</p>
+                <input
+                  type="file"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadDocument.mutate(file);
+                  }}
+                  disabled={uploadDocument.isLoading}
+                />
+
+                {Array.isArray(job?.shared_documents) && job.shared_documents.length > 0 ? (
+                  <div className="space-y-2">
+                    {job.shared_documents.map((doc, idx) => (
+                      <a
+                        key={idx}
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 text-sm text-blue-700 hover:underline"
+                      >
+                        <FileText className="w-4 h-4" /> {doc.name || `Document ${idx + 1}`} (uploaded by {doc.uploaded_by || '—'})
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-stone-500">No documents uploaded yet.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      ) : null}
+
+      {isRequester && !job.accepted_vendor_id && (
+        <div className="mb-6 space-y-4">
+          <JobStatusCard job={job} user={user} />
+        </div>
+      )}
     </div>
   );
 }
