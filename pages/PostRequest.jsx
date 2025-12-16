@@ -240,6 +240,51 @@ export default function PostRequest() {
 
   /* ---------- render ---------- */
 
+  const stepIndex = STEPS.findIndex((x) => x.id === step);
+  const progress = useMemo(() => ((stepIndex + 1) / STEPS.length) * 100, [stepIndex]);
+
+  /* ---------- guards ---------- */
+
+  if (loading) return <LoadingScreen />;
+
+  if (loadError) {
+    return <ErrorBox title="Failed to load page" error={loadError} onBack={() => navigate(-1)} />;
+  }
+
+  if (!user) {
+    return <ErrorBox title="Not signed in" error="Please log in" onBack={() => navigate(-1)} />;
+  }
+
+  if (!profile && !isPrivileged) {
+    return (
+      <div className="max-w-xl mx-auto p-6">
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <h2 className="text-xl font-bold">Profile required</h2>
+            <Button onClick={() => navigate(createPageUrl('CreateProfile'))}>
+              Create Profile
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const hasActiveSubscription =
+    isPrivileged ||
+    isAdminGrantedSubscription ||
+    user?.subscription_status === 'active' ||
+    user?.subscription_status === 'trialing' ||
+    !!user?.stripe_subscription_id;
+
+  if (!hasActiveSubscription) {
+    return <SubscriptionGate user={user} feature="job posting" />;
+  }
+
+  if (profile.approval_status !== 'approved') {
+    return <ErrorBox title="Profile under review" error="Pending approval" onBack={() => navigate(-1)} />;
+  }
+
   const applyAiAnswersToForm = useCallback(() => {
     const times = formatFromTimes(aiAnswers.times);
     const locationText = aiAnswers.location || '';
@@ -333,7 +378,7 @@ export default function PostRequest() {
     return <SubscriptionGate user={user} feature="job posting" />;
   }
 
-  if (profile && profile.approval_status !== 'approved') {
+  if (profile.approval_status !== 'approved') {
     return <ErrorBox title="Profile under review" error="Pending approval" onBack={() => navigate(-1)} />;
   }
 
