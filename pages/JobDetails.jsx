@@ -245,7 +245,7 @@ export default function JobDetails() {
     <div className="max-w-4xl mx-auto pb-10">
       <div className="flex items-center gap-3 mb-6">
         <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft />
+          <ArrowLeftIcon />
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Job Details</h1>
